@@ -6,7 +6,6 @@ import (
 
 	"github.com/daaku/ensure"
 	"github.com/daaku/sqjdb"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/oklog/ulid/v2"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
@@ -41,6 +40,5 @@ func TestCRUD(t *testing.T) {
 	ensure.Nil(t, err)
 	yodaFetched, err := jedis.One(conn, sqjdb.SQL{Query: "where data->>'ID' = ?", Args: []any{yoda.ID}})
 	ensure.Nil(t, err)
-	spew.Dump(yodaFetched)
 	ensure.DeepEqual(t, yoda.Name, yodaFetched.Name)
 }

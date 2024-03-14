@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"braces.dev/errtrace"
-	"github.com/davecgh/go-spew/spew"
 	"zombiezen.com/go/sqlite"
 )
 
@@ -92,7 +91,6 @@ func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
 		}
 	}
 	rowReturned, err := stmt.Step()
-	spew.Dump(rowReturned, err)
 	if err != nil {
 		return nil, errtrace.Wrap(err)
 	}
