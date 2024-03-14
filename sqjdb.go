@@ -214,14 +214,7 @@ func (t *Table[T]) patchOrReplace(partQ string, conn *sqlite.Conn, doc *T, sqls 
 	if err != nil {
 		return errtrace.Wrap(err)
 	}
-	sqls = slices.Concat(
-		[]SQL{
-			{
-				Query: partQ,
-				Args:  []any{jsonS},
-			},
-		},
-		sqls)
+	sqls = slices.Concat([]SQL{{Query: partQ, Args: []any{jsonS}}}, sqls)
 	addSQLQuery(&query, sqls)
 	stmt, err := conn.Prepare(query.String())
 	if err != nil {
