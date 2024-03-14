@@ -8,7 +8,6 @@ import (
 	"github.com/daaku/sqjdb"
 	"github.com/oklog/ulid/v2"
 	"zombiezen.com/go/sqlite"
-	"zombiezen.com/go/sqlite/sqlitex"
 )
 
 type Jedi struct {
@@ -28,8 +27,7 @@ var jedis = sqjdb.NewTable[Jedi]("jedis")
 func newConn(t *testing.T) *sqlite.Conn {
 	conn, err := sqlite.OpenConn(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()))
 	ensure.Nil(t, err)
-	err = sqlitex.ExecuteTransient(conn, "create table jedis (data blob)", nil)
-	ensure.Nil(t, err)
+	ensure.Nil(t, jedis.Migrate(conn))
 	return conn
 }
 
@@ -43,6 +41,21 @@ func TestIDIsGenerated(t *testing.T) {
 	yodaFetched, err := jedis.One(conn, sqjdb.ByID(yodaInserted.ID))
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, yodaInserted.Name, yodaFetched.Name)
+}
+
+func TestMigrateIDIndex(t *testing.T) {
+	conn := newConn(t)
+	stmt := conn.Prep(`explain select data from jedis where data->>'ID' = 'a'`)
+	for {
+		hasRow, err := stmt.Step()
+		ensure.Nil(t, err)
+		if !hasRow {
+			t.Fatal("missing expected opcode")
+		}
+		if stmt.GetText("opcode") == "IdxGT" {
+			break
+		}
+	}
 }
 
 func TestCRUD(t *testing.T) {

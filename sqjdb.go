@@ -8,6 +8,7 @@ import (
 	"braces.dev/errtrace"
 	"github.com/oklog/ulid/v2"
 	"zombiezen.com/go/sqlite"
+	"zombiezen.com/go/sqlite/sqlitex"
 )
 
 func Bind(stmt *sqlite.Stmt, i int, v any) error {
@@ -57,6 +58,19 @@ func NewTable[T any](name string) Table[T] {
 		Name:    name,
 		qInsert: "insert into " + name + " (data) values (jsonb(?))",
 	}
+}
+
+func (t *Table[T]) Migrate(conn *sqlite.Conn) error {
+	qCreate := "create table if not exists " + t.Name + " (data blob)"
+	if err := sqlitex.ExecuteTransient(conn, qCreate, nil); err != nil {
+		return errtrace.Errorf("creating table %q: %w", t.Name, err)
+	}
+	qIndexID := "create unique index if not exists " + t.Name +
+		"_ID on " + t.Name + " (data->>'ID')"
+	if err := sqlitex.ExecuteTransient(conn, qIndexID, nil); err != nil {
+		return errtrace.Errorf("creating ID index on %q: %w", t.Name, err)
+	}
+	return nil
 }
 
 func (t *Table[T]) Insert(conn *sqlite.Conn, doc *T) (*T, error) {
