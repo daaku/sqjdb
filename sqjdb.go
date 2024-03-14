@@ -99,27 +99,38 @@ func (t *Table[T]) Insert(conn *sqlite.Conn, doc *T) (*T, error) {
 	return doc, nil
 }
 
-func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
-	var query strings.Builder
-	query.WriteString("select json(data) from ")
-	query.WriteString(t.Name)
+func addSQLQuery(query *strings.Builder, sqls []SQL) {
 	for _, part := range sqls {
 		query.WriteRune(' ')
 		query.WriteString(part.Query)
 	}
+}
+
+func bindSQLQuery(stmt *sqlite.Stmt, sqls []SQL) error {
+	i := 1 // Bind Parameter indices start at 1.
+	for _, part := range sqls {
+		for _, arg := range part.Args {
+			if err := Bind(stmt, i, arg); err != nil {
+				return errtrace.Wrap(err)
+			}
+			i++
+		}
+	}
+	return nil
+}
+
+func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
+	var query strings.Builder
+	query.WriteString("select json(data) from ")
+	query.WriteString(t.Name)
+	addSQLQuery(&query, sqls)
 	query.WriteString(" limit 1")
 	stmt, err := conn.Prepare(query.String())
 	if err != nil {
 		return nil, errtrace.Wrap(err)
 	}
-	i := 1 // Bind Parameter indices start at 1.
-	for _, part := range sqls {
-		for _, arg := range part.Args {
-			if err := Bind(stmt, i, arg); err != nil {
-				return nil, errtrace.Wrap(err)
-			}
-			i++
-		}
+	if err := bindSQLQuery(stmt, sqls); err != nil {
+		return nil, err
 	}
 	rowReturned, err := stmt.Step()
 	if err != nil {
@@ -134,4 +145,35 @@ func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
 		return nil, errtrace.Errorf("invalid json from db: %w\n%s", err, jsonS)
 	}
 	return v, nil
+}
+
+func (t *Table[T]) All(conn *sqlite.Conn, sqls ...SQL) ([]*T, error) {
+	var query strings.Builder
+	query.WriteString("select json(data) from ")
+	query.WriteString(t.Name)
+	addSQLQuery(&query, sqls)
+	stmt, err := conn.Prepare(query.String())
+	if err != nil {
+		return nil, errtrace.Wrap(err)
+	}
+	if err := bindSQLQuery(stmt, sqls); err != nil {
+		return nil, err
+	}
+	var rows []*T
+	for {
+		rowReturned, err := stmt.Step()
+		if err != nil {
+			return nil, errtrace.Wrap(err)
+		}
+		if !rowReturned {
+			break
+		}
+		jsonS := stmt.ColumnText(0)
+		v := new(T)
+		if err := json.Unmarshal([]byte(jsonS), v); err != nil {
+			return nil, errtrace.Errorf("invalid json from db: %w\n%s", err, jsonS)
+		}
+		rows = append(rows, v)
+	}
+	return rows, nil
 }

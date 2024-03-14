@@ -58,11 +58,31 @@ func TestMigrateIDIndex(t *testing.T) {
 	}
 }
 
-func TestCRUD(t *testing.T) {
+func TestOne(t *testing.T) {
 	conn := newConn(t)
 	_, err := jedis.Insert(conn, &yoda)
 	ensure.Nil(t, err)
 	yodaFetched, err := jedis.One(conn, sqjdb.ByID(yoda.ID))
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, yoda.Name, yodaFetched.Name)
+}
+
+func byAge(age int) sqjdb.SQL {
+	return sqjdb.SQL{Query: "where data->>'Age' = ?", Args: []any{age}}
+}
+
+func TestAll(t *testing.T) {
+	conn := newConn(t)
+	_, err := jedis.Insert(conn, &yoda)
+	ensure.Nil(t, err)
+	_, err = jedis.Insert(conn, &Jedi{Name: "luke", Age: 42})
+	ensure.Nil(t, err)
+	_, err = jedis.Insert(conn, &Jedi{Name: "leia", Age: 42})
+	ensure.Nil(t, err)
+	rows42, err := jedis.All(conn, byAge(42))
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, len(rows42), 2)
+	rowsYoda, err := jedis.All(conn, byAge(yoda.Age))
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, len(rowsYoda), 1)
 }
