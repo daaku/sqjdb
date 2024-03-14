@@ -128,7 +128,6 @@ func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
 	if !rowReturned {
 		return nil, nil
 	}
-	// TODO: benchmark if this is better than ColumnReader
 	jsonS := stmt.ColumnText(0)
 	v := new(T)
 	if err := json.Unmarshal([]byte(jsonS), v); err != nil {
