@@ -60,7 +60,10 @@ func (t *Table[T]) Insert(conn *sqlite.Conn, doc *T) (*T, error) {
 	if err != nil {
 		return nil, errtrace.Wrap(err)
 	}
-	stmt := conn.Prep(t.qInsert)
+	stmt, err := conn.Prepare(t.qInsert)
+	if err != nil {
+		return nil, errtrace.Wrap(err)
+	}
 	stmt.BindText(1, string(jsonS))
 	if _, err := stmt.Step(); err != nil {
 		return nil, errtrace.Errorf("inserting document in %q: %w", t.Name, err)
