@@ -119,19 +119,7 @@ func bindSQLQuery(stmt *sqlite.Stmt, sqls []SQL) error {
 	return nil
 }
 
-func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
-	var query strings.Builder
-	query.WriteString("select json(data) from ")
-	query.WriteString(t.Name)
-	addSQLQuery(&query, sqls)
-	query.WriteString(" limit 1")
-	stmt, err := conn.Prepare(query.String())
-	if err != nil {
-		return nil, errtrace.Wrap(err)
-	}
-	if err := bindSQLQuery(stmt, sqls); err != nil {
-		return nil, err
-	}
+func (t *Table[T]) stepOne(stmt *sqlite.Stmt) (*T, error) {
 	rowReturned, err := stmt.Step()
 	if err != nil {
 		return nil, errtrace.Wrap(err)
@@ -145,6 +133,22 @@ func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
 		return nil, errtrace.Errorf("invalid json from db: %w\n%s", err, jsonS)
 	}
 	return v, nil
+}
+
+func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
+	var query strings.Builder
+	query.WriteString("select json(data) from ")
+	query.WriteString(t.Name)
+	addSQLQuery(&query, sqls)
+	query.WriteString(" limit 1")
+	stmt, err := conn.Prepare(query.String())
+	if err != nil {
+		return nil, errtrace.Wrap(err)
+	}
+	if err := bindSQLQuery(stmt, sqls); err != nil {
+		return nil, err
+	}
+	return t.stepOne(stmt)
 }
 
 func (t *Table[T]) All(conn *sqlite.Conn, sqls ...SQL) ([]*T, error) {
@@ -161,17 +165,12 @@ func (t *Table[T]) All(conn *sqlite.Conn, sqls ...SQL) ([]*T, error) {
 	}
 	var rows []*T
 	for {
-		rowReturned, err := stmt.Step()
+		v, err := t.stepOne(stmt)
 		if err != nil {
-			return nil, errtrace.Wrap(err)
+			return nil, err
 		}
-		if !rowReturned {
+		if v == nil {
 			break
-		}
-		jsonS := stmt.ColumnText(0)
-		v := new(T)
-		if err := json.Unmarshal([]byte(jsonS), v); err != nil {
-			return nil, errtrace.Errorf("invalid json from db: %w\n%s", err, jsonS)
 		}
 		rows = append(rows, v)
 	}
