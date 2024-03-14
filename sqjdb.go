@@ -176,3 +176,21 @@ func (t *Table[T]) All(conn *sqlite.Conn, sqls ...SQL) ([]*T, error) {
 	}
 	return rows, nil
 }
+
+func (t *Table[T]) Delete(conn *sqlite.Conn, sqls ...SQL) error {
+	var query strings.Builder
+	query.WriteString("delete from ")
+	query.WriteString(t.Name)
+	addSQLQuery(&query, sqls)
+	stmt, err := conn.Prepare(query.String())
+	if err != nil {
+		return errtrace.Wrap(err)
+	}
+	if err := bindSQLQuery(stmt, sqls); err != nil {
+		return err
+	}
+	if _, err := stmt.Step(); err != nil {
+		return errtrace.Wrap(err)
+	}
+	return nil
+}
