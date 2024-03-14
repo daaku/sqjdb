@@ -126,3 +126,17 @@ func TestPatch(t *testing.T) {
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, afterPatch.Name, darth)
 }
+
+func TestReplace(t *testing.T) {
+	conn := newConn(t)
+	beforeReplace, err := jedis.One(conn, sqjdb.ByID(luke.ID))
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, beforeReplace.Name, luke.Name)
+	const darth = "darth"
+	err = jedis.Replace(conn, &Jedi{ID: luke.ID, Name: darth}, sqjdb.ByID(luke.ID))
+	ensure.Nil(t, err)
+	afterReplace, err := jedis.One(conn, sqjdb.ByID(luke.ID))
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, afterReplace.Name, darth)
+	ensure.DeepEqual(t, afterReplace.Age, 0)
+}

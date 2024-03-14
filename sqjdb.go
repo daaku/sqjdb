@@ -206,7 +206,7 @@ func (t *Table[T]) Delete(conn *sqlite.Conn, sqls ...SQL) error {
 	return nil
 }
 
-func (t *Table[T]) Patch(conn *sqlite.Conn, doc *T, sqls ...SQL) error {
+func (t *Table[T]) patchOrReplace(partQ string, conn *sqlite.Conn, doc *T, sqls []SQL) error {
 	var query strings.Builder
 	query.WriteString("update ")
 	query.WriteString(t.Name)
@@ -217,7 +217,7 @@ func (t *Table[T]) Patch(conn *sqlite.Conn, doc *T, sqls ...SQL) error {
 	sqls = slices.Concat(
 		[]SQL{
 			{
-				Query: "set data = jsonb_patch(data, ?)",
+				Query: partQ,
 				Args:  []any{jsonS},
 			},
 		},
@@ -234,4 +234,12 @@ func (t *Table[T]) Patch(conn *sqlite.Conn, doc *T, sqls ...SQL) error {
 		return errtrace.Wrap(err)
 	}
 	return nil
+}
+
+func (t *Table[T]) Patch(conn *sqlite.Conn, doc *T, sqls ...SQL) error {
+	return t.patchOrReplace("set data = jsonb_patch(data, ?)", conn, doc, sqls)
+}
+
+func (t *Table[T]) Replace(conn *sqlite.Conn, doc *T, sqls ...SQL) error {
+	return t.patchOrReplace("set data = jsonb(?)", conn, doc, sqls)
 }
