@@ -2,6 +2,7 @@ package sqjdb_test
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/daaku/ensure"
@@ -25,7 +26,11 @@ var yoda = Jedi{
 var jedis = sqjdb.NewTable[Jedi]("jedis")
 
 func newConn(t *testing.T) *sqlite.Conn {
-	conn, err := sqlite.OpenConn(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()))
+	mode := "mode=memory&"
+	if os.Getenv("NO_MEMORY") == "1" {
+		mode = ""
+	}
+	conn, err := sqlite.OpenConn(fmt.Sprintf("file:%s.db?%scache=shared", t.Name(), mode))
 	ensure.Nil(t, err)
 	ensure.Nil(t, jedis.Migrate(conn))
 	return conn
