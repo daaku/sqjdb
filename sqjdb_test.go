@@ -12,9 +12,9 @@ import (
 )
 
 type Jedi struct {
-	ID   string
-	Name string
-	Age  int
+	ID   string `json:",omitempty"`
+	Name string `json:",omitempty"`
+	Age  int    `json:",omitempty"`
 }
 
 var (
@@ -112,4 +112,17 @@ func TestDelete(t *testing.T) {
 	afterDelete, err := jedis.All(conn, byAge(luke.Age))
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, len(afterDelete), 1)
+}
+
+func TestPatch(t *testing.T) {
+	conn := newConn(t)
+	beforePatch, err := jedis.One(conn, sqjdb.ByID(luke.ID))
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, beforePatch.Name, luke.Name)
+	const darth = "darth"
+	err = jedis.Patch(conn, &Jedi{Name: darth}, sqjdb.ByID(luke.ID))
+	ensure.Nil(t, err)
+	afterPatch, err := jedis.One(conn, sqjdb.ByID(luke.ID))
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, afterPatch.Name, darth)
 }

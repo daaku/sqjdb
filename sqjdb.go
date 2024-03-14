@@ -2,7 +2,9 @@ package sqjdb
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
+	"slices"
 	"strings"
 
 	"braces.dev/errtrace"
@@ -10,6 +12,8 @@ import (
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
+
+var ErrNoRows = errors.New("sqjson: no rows in result set")
 
 func Bind(stmt *sqlite.Stmt, i int, v any) error {
 	switch v := v.(type) {
@@ -148,7 +152,14 @@ func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
 	if err := bindSQLQuery(stmt, sqls); err != nil {
 		return nil, err
 	}
-	return t.stepOne(stmt)
+	v, err := t.stepOne(stmt)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, errtrace.Wrap(ErrNoRows)
+	}
+	return v, nil
 }
 
 func (t *Table[T]) All(conn *sqlite.Conn, sqls ...SQL) ([]*T, error) {
@@ -181,6 +192,36 @@ func (t *Table[T]) Delete(conn *sqlite.Conn, sqls ...SQL) error {
 	var query strings.Builder
 	query.WriteString("delete from ")
 	query.WriteString(t.Name)
+	addSQLQuery(&query, sqls)
+	stmt, err := conn.Prepare(query.String())
+	if err != nil {
+		return errtrace.Wrap(err)
+	}
+	if err := bindSQLQuery(stmt, sqls); err != nil {
+		return err
+	}
+	if _, err := stmt.Step(); err != nil {
+		return errtrace.Wrap(err)
+	}
+	return nil
+}
+
+func (t *Table[T]) Patch(conn *sqlite.Conn, doc *T, sqls ...SQL) error {
+	var query strings.Builder
+	query.WriteString("update ")
+	query.WriteString(t.Name)
+	jsonS, err := json.Marshal(doc)
+	if err != nil {
+		return errtrace.Wrap(err)
+	}
+	sqls = slices.Concat(
+		[]SQL{
+			{
+				Query: "set data = jsonb_patch(data, ?)",
+				Args:  []any{jsonS},
+			},
+		},
+		sqls)
 	addSQLQuery(&query, sqls)
 	stmt, err := conn.Prepare(query.String())
 	if err != nil {
