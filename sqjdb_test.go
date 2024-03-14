@@ -2,6 +2,8 @@ package sqjdb_test
 
 import (
 	"fmt"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/daaku/ensure"
@@ -22,10 +24,19 @@ var yoda = Jedi{
 	Age:  980,
 }
 
-var jedis = sqjdb.NewTable[Jedi]("jedis")
+var large = Jedi{
+	ID:   ulid.Make().String(),
+	Name: strings.Repeat("yoda", 1000),
+	Age:  981,
+}
 
-func newConn(t *testing.T) *sqlite.Conn {
-	conn, err := sqlite.OpenConn(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name()))
+var (
+	jedis   = sqjdb.NewTable[Jedi]("jedis")
+	counter atomic.Int32
+)
+
+func newConn(t testing.TB) *sqlite.Conn {
+	conn, err := sqlite.OpenConn(fmt.Sprintf("file:%s-%d?mode=memory&cache=shared", t.Name(), counter.Add(1)))
 	ensure.Nil(t, err)
 	ensure.Nil(t, jedis.Migrate(conn))
 	return conn
@@ -65,4 +76,57 @@ func TestCRUD(t *testing.T) {
 	yodaFetched, err := jedis.One(conn, sqjdb.ByID(yoda.ID))
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, yoda.Name, yodaFetched.Name)
+}
+
+func prepOne(b *testing.B) *sqlite.Conn {
+	conn := newConn(b)
+	_, err := jedis.Insert(conn, &yoda)
+	ensure.Nil(b, err)
+	_, err = jedis.Insert(conn, &large)
+	ensure.Nil(b, err)
+	return conn
+}
+
+func BenchmarkOneText(b *testing.B) {
+	conn := prepOne(b)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		y, err := jedis.One(conn, sqjdb.ByID(yoda.ID))
+		if err != nil {
+			b.Fatal("unexpected")
+		}
+		if y.Age != yoda.Age {
+			b.Fatal("unexpected")
+		}
+
+		l, err := jedis.One(conn, sqjdb.ByID(large.ID))
+		if err != nil {
+			b.Fatal("unexpected")
+		}
+		if l.Age != large.Age {
+			b.Fatal("unexpected")
+		}
+	}
+}
+
+func BenchmarkOneReader(b *testing.B) {
+	conn := prepOne(b)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		y, err := jedis.OneReader(conn, sqjdb.ByID(yoda.ID))
+		if err != nil {
+			b.Fatal("unexpected")
+		}
+		if y.Age != yoda.Age {
+			b.Fatal("unexpected")
+		}
+
+		l, err := jedis.OneReader(conn, sqjdb.ByID(large.ID))
+		if err != nil {
+			b.Fatal("unexpected")
+		}
+		if l.Age != large.Age {
+			b.Fatal("unexpected")
+		}
+	}
 }
