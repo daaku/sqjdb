@@ -2,9 +2,11 @@ package sqjdb
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 
 	"braces.dev/errtrace"
+	"github.com/oklog/ulid/v2"
 	"zombiezen.com/go/sqlite"
 )
 
@@ -54,8 +56,16 @@ func NewTable[T any](name string) Table[T] {
 }
 
 func (t *Table[T]) Insert(conn *sqlite.Conn, doc *T) (*T, error) {
-	// check if ID is set
-	// if not, create shallow copy, set it and use that
+	reflectV := reflect.Indirect(reflect.ValueOf(doc))
+	vID := reflectV.FieldByName("ID")
+	if !vID.IsValid() {
+		return nil, errtrace.Errorf("expected type %T to contain an ID field of type string", doc)
+	}
+	if vID.IsZero() {
+		docCopy := *doc
+		doc = &docCopy
+		reflect.Indirect(reflect.ValueOf(doc)).FieldByName("ID").SetString(ulid.Make().String())
+	}
 	jsonS, err := json.Marshal(doc)
 	if err != nil {
 		return nil, errtrace.Wrap(err)

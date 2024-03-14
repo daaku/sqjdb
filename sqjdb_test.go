@@ -33,9 +33,20 @@ func newConn(t *testing.T) *sqlite.Conn {
 	return conn
 }
 
+func TestIDIsGenerated(t *testing.T) {
+	conn := newConn(t)
+	yodaToInsert := &Jedi{Name: yoda.Name}
+	yodaInserted, err := jedis.Insert(conn, yodaToInsert)
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, yodaToInsert.ID, "")
+	ensure.NotDeepEqual(t, len(yodaInserted.ID), 0)
+	yodaFetched, err := jedis.One(conn, sqjdb.SQL{Query: "where data->>'ID' = ?", Args: []any{yodaInserted.ID}})
+	ensure.Nil(t, err)
+	ensure.DeepEqual(t, yodaInserted.Name, yodaFetched.Name)
+}
+
 func TestCRUD(t *testing.T) {
 	conn := newConn(t)
-	defer conn.Close()
 	_, err := jedis.Insert(conn, &yoda)
 	ensure.Nil(t, err)
 	yodaFetched, err := jedis.One(conn, sqjdb.SQL{Query: "where data->>'ID' = ?", Args: []any{yoda.ID}})
