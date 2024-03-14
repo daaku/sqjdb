@@ -43,6 +43,10 @@ type SQL struct {
 	Args  []any
 }
 
+func ByID(id string) SQL {
+	return SQL{Query: "where data->>'ID' = ?", Args: []any{id}}
+}
+
 type Table[T any] struct {
 	Name    string
 	qInsert string

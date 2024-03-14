@@ -40,7 +40,7 @@ func TestIDIsGenerated(t *testing.T) {
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, yodaToInsert.ID, "")
 	ensure.NotDeepEqual(t, len(yodaInserted.ID), 0)
-	yodaFetched, err := jedis.One(conn, sqjdb.SQL{Query: "where data->>'ID' = ?", Args: []any{yodaInserted.ID}})
+	yodaFetched, err := jedis.One(conn, sqjdb.ByID(yodaInserted.ID))
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, yodaInserted.Name, yodaFetched.Name)
 }
@@ -49,7 +49,7 @@ func TestCRUD(t *testing.T) {
 	conn := newConn(t)
 	_, err := jedis.Insert(conn, &yoda)
 	ensure.Nil(t, err)
-	yodaFetched, err := jedis.One(conn, sqjdb.SQL{Query: "where data->>'ID' = ?", Args: []any{yoda.ID}})
+	yodaFetched, err := jedis.One(conn, sqjdb.ByID(yoda.ID))
 	ensure.Nil(t, err)
 	ensure.DeepEqual(t, yoda.Name, yodaFetched.Name)
 }
