@@ -18,7 +18,7 @@ var ErrNoRows = errors.New("sqjson: no rows in result set")
 func Bind(stmt *sqlite.Stmt, i int, v any) error {
 	switch v := v.(type) {
 	default:
-		return fmt.Errorf("unexpected value %v of type %T", v, v)
+		return fmt.Errorf("sqjdb: unexpected value %v of type %T", v, v)
 	case int:
 		stmt.BindInt64(i, int64(v))
 	case int16:
@@ -67,12 +67,12 @@ func NewTable[T any](name string) Table[T] {
 func (t *Table[T]) Migrate(conn *sqlite.Conn) error {
 	qCreate := "create table if not exists " + t.Name + " (data blob)"
 	if err := sqlitex.ExecuteTransient(conn, qCreate, nil); err != nil {
-		return fmt.Errorf("creating table %q: %w", t.Name, err)
+		return fmt.Errorf("sqjdb: creating table %q: %w", t.Name, err)
 	}
 	qIndexID := "create unique index if not exists " + t.Name +
 		"_ID on " + t.Name + " (data->>'ID')"
 	if err := sqlitex.ExecuteTransient(conn, qIndexID, nil); err != nil {
-		return fmt.Errorf("creating ID index on %q: %w", t.Name, err)
+		return fmt.Errorf("sqjdb: creating ID index on %q: %w", t.Name, err)
 	}
 	return nil
 }
@@ -81,7 +81,7 @@ func (t *Table[T]) Insert(conn *sqlite.Conn, doc *T) (*T, error) {
 	reflectV := reflect.Indirect(reflect.ValueOf(doc))
 	vID := reflectV.FieldByName("ID")
 	if !vID.IsValid() {
-		return nil, fmt.Errorf("expected type %T to contain an ID field of type string", doc)
+		return nil, fmt.Errorf("sqjdb: expected type %T to contain an ID field of type string", doc)
 	}
 	if vID.IsZero() {
 		docCopy := *doc
@@ -90,15 +90,15 @@ func (t *Table[T]) Insert(conn *sqlite.Conn, doc *T) (*T, error) {
 	}
 	jsonS, err := json.Marshal(doc)
 	if err != nil {
-		return nil, fmt.Errorf("failed to json.Marshal: %w", err)
+		return nil, fmt.Errorf("sqjdb: failed to json.Marshal: %w", err)
 	}
 	stmt, err := conn.Prepare(t.qInsert)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare %q: %w", t.qInsert, err)
+		return nil, fmt.Errorf("sqjdb: failed to prepare %q: %w", t.qInsert, err)
 	}
 	stmt.BindText(1, string(jsonS))
 	if _, err := stmt.Step(); err != nil {
-		return nil, fmt.Errorf("inserting document in %q: %w", t.Name, err)
+		return nil, fmt.Errorf("sqjdb: inserting document in %q: %w", t.Name, err)
 	}
 	return doc, nil
 }
@@ -134,7 +134,7 @@ func (t *Table[T]) stepOne(stmt *sqlite.Stmt) (*T, error) {
 	jsonS := stmt.ColumnText(0)
 	v := new(T)
 	if err := json.Unmarshal([]byte(jsonS), v); err != nil {
-		return nil, fmt.Errorf("invalid json from db: %w\n%s", err, jsonS)
+		return nil, fmt.Errorf("sqjdb: invalid json from db: %w\n%s", err, jsonS)
 	}
 	return v, nil
 }
@@ -147,7 +147,7 @@ func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
 	query.WriteString(" limit 1")
 	stmt, err := conn.Prepare(query.String())
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare: %q: %w", query.String(), err)
+		return nil, fmt.Errorf("sqjdb: failed to prepare: %q: %w", query.String(), err)
 	}
 	if err := bindSQLQuery(stmt, sqls); err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func (t *Table[T]) All(conn *sqlite.Conn, sqls ...SQL) ([]*T, error) {
 	addSQLQuery(&query, sqls)
 	stmt, err := conn.Prepare(query.String())
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare: %q: %w", query.String(), err)
+		return nil, fmt.Errorf("sqjdb: failed to prepare: %q: %w", query.String(), err)
 	}
 	if err := bindSQLQuery(stmt, sqls); err != nil {
 		return nil, err
@@ -195,13 +195,13 @@ func (t *Table[T]) Delete(conn *sqlite.Conn, sqls ...SQL) error {
 	addSQLQuery(&query, sqls)
 	stmt, err := conn.Prepare(query.String())
 	if err != nil {
-		return fmt.Errorf("failed to prepare %q: %w", query.String(), err)
+		return fmt.Errorf("sqjdb: failed to prepare %q: %w", query.String(), err)
 	}
 	if err := bindSQLQuery(stmt, sqls); err != nil {
 		return err
 	}
 	if _, err := stmt.Step(); err != nil {
-		return fmt.Errorf("failed to delete: %w", err)
+		return fmt.Errorf("sqjdb: failed to delete: %w", err)
 	}
 	return nil
 }
@@ -212,19 +212,19 @@ func (t *Table[T]) patchOrReplace(partQ string, conn *sqlite.Conn, doc *T, sqls 
 	query.WriteString(t.Name)
 	jsonS, err := json.Marshal(doc)
 	if err != nil {
-		return fmt.Errorf("failed to json.Marshal: %w", err)
+		return fmt.Errorf("sqjdb: failed to json.Marshal: %w", err)
 	}
 	sqls = slices.Concat([]SQL{{Query: partQ, Args: []any{jsonS}}}, sqls)
 	addSQLQuery(&query, sqls)
 	stmt, err := conn.Prepare(query.String())
 	if err != nil {
-		return fmt.Errorf("failed to prepare %q: %w", query.String(), err)
+		return fmt.Errorf("sqjdb: failed to prepare %q: %w", query.String(), err)
 	}
 	if err := bindSQLQuery(stmt, sqls); err != nil {
 		return err
 	}
 	if _, err := stmt.Step(); err != nil {
-		return fmt.Errorf("failed to execute %q: %w", query.String(), err)
+		return fmt.Errorf("sqjdb: failed to execute %q: %w", query.String(), err)
 	}
 	return nil
 }
