@@ -13,7 +13,7 @@ import (
 	"zombiezen.com/go/sqlite/sqlitex"
 )
 
-var ErrNoRows = errors.New("sqjson: no rows in result set")
+var ErrNoRow = errors.New("sqjson: no row")
 
 func Bind(stmt *sqlite.Stmt, i int, v any) error {
 	switch v := v.(type) {
@@ -157,7 +157,7 @@ func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
 		return nil, err
 	}
 	if v == nil {
-		return nil, ErrNoRows
+		return nil, ErrNoRow
 	}
 	return v, nil
 }
