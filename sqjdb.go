@@ -1,3 +1,13 @@
+// Package sqjdb provides an opinionated libary to store JSON encoded documents
+// in a SQLite Database.
+//
+// It has various opinions about how you go about doing this:
+//  1. Documents contain an "ID" field of type string. You can manage it, or it
+//     will be filled in for you with ULIDs.
+//  2. Tables store the JSON document in a column named "data". It's JSONB.
+//  3. SQL is is only lightly hidden from you.
+//  4. Make indexes on your document fields. The standard migrations, if you use
+//     them, will make one on the ID field for you.
 package sqjdb
 
 import (
@@ -13,8 +23,11 @@ import (
 	"zombiezen.com/go/sqlite/sqlitex"
 )
 
-var ErrNoRow = errors.New("sqjson: no row")
+// ErrNoDoc indicates the requested query did not match a document.
+var ErrNoDoc = errors.New("sqjson: no document")
 
+// Bind is used internally to Bind placeholders. It is available as a public API
+// for when you are querying the database directly.
 func Bind(stmt *sqlite.Stmt, i int, v any) error {
 	switch v := v.(type) {
 	default:
@@ -43,20 +56,25 @@ func Bind(stmt *sqlite.Stmt, i int, v any) error {
 	return nil
 }
 
+// SQL is part of a larger SQL query.
 type SQL struct {
 	Query string
 	Args  []any
 }
 
+// ByID generates a where clause to select a document by ID.
 func ByID(id string) SQL {
 	return SQL{Query: "where data->>'ID' = ?", Args: []any{id}}
 }
 
+// Table provides access to a named table with the associated type.
+// Use NewTable to create one.
 type Table[T any] struct {
 	Name    string
 	qInsert string
 }
 
+// NewTable creates a new Table.
 func NewTable[T any](name string) Table[T] {
 	return Table[T]{
 		Name:    name,
@@ -64,6 +82,9 @@ func NewTable[T any](name string) Table[T] {
 	}
 }
 
+// Migrate runs the standard migrations, including creating the table if
+// necessary. They are idempotent and should probably be run on application
+// startup.
 func (t *Table[T]) Migrate(conn *sqlite.Conn) error {
 	qCreate := "create table if not exists " + t.Name + " (data blob)"
 	if err := sqlitex.ExecuteTransient(conn, qCreate, nil); err != nil {
@@ -77,6 +98,9 @@ func (t *Table[T]) Migrate(conn *sqlite.Conn) error {
 	return nil
 }
 
+// Insert a new document. If the document contains a non-empty ID, it will be
+// returned as is. If the ID is empty, a shallow clone of the document will be
+// returned with a generated ID set.
 func (t *Table[T]) Insert(conn *sqlite.Conn, doc *T) (*T, error) {
 	reflectV := reflect.Indirect(reflect.ValueOf(doc))
 	vID := reflectV.FieldByName("ID")
@@ -139,6 +163,8 @@ func (t *Table[T]) stepOne(stmt *sqlite.Stmt) (*T, error) {
 	return v, nil
 }
 
+// One returns a single document per the given query. It returns the error
+// ErrNoDoc if no document is found.
 func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
 	var query strings.Builder
 	query.WriteString("select json(data) from ")
@@ -157,11 +183,13 @@ func (t *Table[T]) One(conn *sqlite.Conn, sqls ...SQL) (*T, error) {
 		return nil, err
 	}
 	if v == nil {
-		return nil, ErrNoRow
+		return nil, ErrNoDoc
 	}
 	return v, nil
 }
 
+// All returns all documents per the given query. It returns an empty slice with
+// no error if no documents match.
 func (t *Table[T]) All(conn *sqlite.Conn, sqls ...SQL) ([]*T, error) {
 	var query strings.Builder
 	query.WriteString("select json(data) from ")
@@ -174,7 +202,7 @@ func (t *Table[T]) All(conn *sqlite.Conn, sqls ...SQL) ([]*T, error) {
 	if err := bindSQLQuery(stmt, sqls); err != nil {
 		return nil, err
 	}
-	var rows []*T
+	var docs []*T
 	for {
 		v, err := t.stepOne(stmt)
 		if err != nil {
@@ -183,11 +211,12 @@ func (t *Table[T]) All(conn *sqlite.Conn, sqls ...SQL) ([]*T, error) {
 		if v == nil {
 			break
 		}
-		rows = append(rows, v)
+		docs = append(docs, v)
 	}
-	return rows, nil
+	return docs, nil
 }
 
+// Delete one or more documents per the given query.
 func (t *Table[T]) Delete(conn *sqlite.Conn, sqls ...SQL) error {
 	var query strings.Builder
 	query.WriteString("delete from ")
@@ -229,10 +258,12 @@ func (t *Table[T]) patchOrReplace(partQ string, conn *sqlite.Conn, doc *T, sqls 
 	return nil
 }
 
+// Patch applies the given update using jsonb_patch per the given query.
 func (t *Table[T]) Patch(conn *sqlite.Conn, doc *T, sqls ...SQL) error {
 	return t.patchOrReplace("set data = jsonb_patch(data, ?)", conn, doc, sqls)
 }
 
+// Replace replaces the document(s) per the given query.
 func (t *Table[T]) Replace(conn *sqlite.Conn, doc *T, sqls ...SQL) error {
 	return t.patchOrReplace("set data = jsonb(?)", conn, doc, sqls)
 }
