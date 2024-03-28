@@ -5,7 +5,7 @@ go 1.22.1
 require (
 	github.com/daaku/ensure v1.0.1
 	github.com/oklog/ulid/v2 v2.1.0
-	zombiezen.com/go/sqlite v1.1.2
+	zombiezen.com/go/sqlite v1.2.0
 )
 
 require (
